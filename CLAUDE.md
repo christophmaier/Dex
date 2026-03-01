@@ -40,12 +40,16 @@ The system automatically suggests `/getting-started` at next session if vault < 
 ## User Profile
 
 <!-- Updated during onboarding -->
-**Name:** Not yet configured
-**Role:** Not yet configured
-**Company Size:** Not yet configured
-**Working Style:** Not yet configured
+**Name:** Christoph Maier
+**Role:** Product Leader (currently in job search)
+**Company Size:** Enterprise (targeting 300+ companies)
+**Background:** 20+ years in product leadership across payments (S-Payment/Sparkassen), e-commerce (idealo), and digital media (Axel Springer, ProSiebenSat.1). Based in Berlin.
+**Working Style:** Hypothesis-driven, data-focused product leader with experience scaling products at enterprise companies
 **Pillars:**
-- Not yet configured
+- **Job Search** - Secure new Product leadership role in Berlin (300+ company size)
+- **AI Mastery** - Learn AI tools to become 10x more focused, clear, and knowledgeable
+- **Berlin Network** - Expand professional network and demonstrate value
+- **Build & Ship** - Build and ship products to stay hands-on and demonstrate capabilities
 
 ---
 
@@ -68,6 +72,9 @@ Add any personal instructions between these markers. The `/dex-update` process p
 
 ## USER_EXTENSIONS_START
 <!-- Add your personal customizations here. -->
+
+### Upstream Sync Policy
+This repo is a fork of davekilleen/Dex. Fetching and merging from upstream are both allowed. **Never push to upstream** — this prevents accidental leakage of PII (notes, tasks, person pages, etc.) from the personal vault.
 ## USER_EXTENSIONS_END
 
 ---
