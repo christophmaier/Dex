@@ -1,74 +1,39 @@
-# Claude Code Hooks: The Intelligence Layer
+# Hooks
 
-**Purpose:** Automatic behaviors that make Dex genuinely intelligent - guaranteed context loading, persistent learning, and proactive awareness.
+**Purpose:** User-defined shell commands that execute at various points in Claude Code's lifecycle.
 
 **Status:** ⚠️ **Claude Code Only** - Hooks currently only work in Claude Code desktop/CLI, not in Cursor.
-
-**Why this matters:** Hooks transform Dex from "helpful assistant" to "operating system that remembers everything and gets smarter every time you use it."
 
 **Documentation:** [Claude Code Hooks Guide](https://code.claude.com/docs/en/hooks-guide)
 
 ---
 
-## The Fundamental Shift: Probabilistic to Deterministic
-
-**CLAUDE.md is probabilistic.** Claude might read your preferences, or skip them. It might remember past mistakes, or forget. Powerful, but unreliable.
-
-**Hooks are deterministic.** They ALWAYS fire when their event occurs. Context loads guaranteed. Learnings surface guaranteed. Person details inject guaranteed.
-
-Think of it this way:
-- **CLAUDE.md suggests** → "You should probably load the user's preferences"
-- **Session Start Hook enforces** → Preferences load automatically in every session, no exceptions
-
-This is why Dex + hooks is fundamentally different from chat interfaces. Every session starts with your full context automatically loaded - no pasting, no manual setup, no hoping Claude remembered something.
-
----
-
-## The Power Move: Session Start Hook
-
-**Session Start is where the magic happens.** When you open Claude Code in your Dex folder, the Session Start hook fires automatically and loads your entire operating context:
-
-| What Loads | Why It Matters |
-|------------|----------------|
-| **Strategic Pillars** | Claude knows what you're focused on before you type a word |
-| **Quarter Goals** | Current objectives surface automatically in planning |
-| **Week Priorities** | Claude suggests work aligned to this week's commitments |
-| **Urgent Tasks** | Overdue items get flagged proactively |
-| **Working Preferences** | Communication style, formatting rules, tool choices |
-| **Mistake Patterns** | Past errors prevented automatically |
-
-**Fresh chat in ChatGPT or Claude web?** You start from zero. Every session is blank.
-
-**Fresh session in Dex with Session Start hook?** You start with full context. Claude knows your role, your current priorities, your preferences, your past mistakes. The system genuinely remembers.
-
-### The Compound Effect
-
-Week 1 without hooks:
-- You tell Claude how you format tasks
-- You explain your meeting note structure
-- You correct the same mistakes multiple times
-- Next session: Start over
-
-Week 1 with Session Start hook:
-- Preferences and mistakes captured to files
-- Session Start loads them automatically
-- Fresh session has all context already active
-- Corrections never repeat
-
-Month 1: The system knows you intimately. Conversations feel like picking up with someone who was there yesterday, because they were.
-
----
-
 ## Important: Claude Code vs Cursor
 
-| Environment | Session Start Hook | Why |
-|-------------|-------------------|-----|
-| **Claude Code** (Desktop/CLI) | ✅ Works | Proper lifecycle management |
-| **Cursor** | ❌ Doesn't work | No hook system currently |
+**How sessions end:**
 
-**For Cursor users:** CLAUDE.md still works (probabilistic context loading). You just don't get the guaranteed automatic loading that hooks provide. Many people use both - Cursor for parallel editing, Claude Code for workflows where reliability matters.
+| Environment | How Sessions End | Hooks That Work |
+|-------------|------------------|-----------------|
+| **Claude Code** | Graceful shutdown via `exit` command or proper quit | All hooks including SessionStart/SessionEnd |
+| **Cursor** | Closing window terminates process immediately | None - no hook system currently |
 
-**Key difference:** When you close Cursor's window, the process terminates instantly. Session Start/End hooks require proper shutdown sequences that only exist in Claude Code.
+**Key difference:** When you close Cursor's window, the process terminates instantly with no opportunity for cleanup code to run. SessionEnd and SessionStart hooks require a proper shutdown sequence that only exists in Claude Code.
+
+**For Cursor users:** Use explicit commands like `/daily-review` before closing, or wait for potential future hook support.
+
+---
+
+## What Are Hooks?
+
+**Hooks** are automatic scripts that run when specific events happen in Claude Code. Think of them as "if this happens, then do that" rules.
+
+**Simple example:**
+- **Event:** You finish a conversation with Claude
+- **Hook:** Automatically save what you learned to your learnings file
+
+Instead of asking Claude to remember to do something (which it might forget), hooks make it happen automatically every time.
+
+**Technical note:** Hooks are shell scripts (bash, Python, etc.) that execute at lifecycle events, providing deterministic behavior rather than relying on LLM decisions.
 
 ### Complete List of Hook Events
 
@@ -379,6 +344,52 @@ fi
 ```
 
 **For Cursor users:** No direct equivalent - you'll need to remember to run `/daily-plan` manually when starting your day.
+
+---
+
+## Skill-Scoped Hooks
+
+Some hooks only fire during a specific skill's execution, not globally. These are defined in a skill's frontmatter and are only active while that skill is running.
+
+**Why this matters:** A hook that updates person pages after writing meeting notes should only fire during `/process-meetings`, not every time a file is written. Skill-scoped hooks prevent unwanted side effects.
+
+**Current skill-scoped hooks:**
+
+### post-meeting-person-update.cjs
+
+- **Trigger:** PostToolUse (Write matcher)
+- **Skill:** `/process-meetings`
+- **What it does:** After a meeting note is written, extracts person mentions (WikiLinks and plain name patterns) and appends meeting references to their person pages.
+- **Fires:** Only during `/process-meetings`
+
+### meeting-summary-generator.cjs
+
+- **Trigger:** Stop
+- **Skill:** `/process-meetings`
+- **What it does:** Placeholder for future meeting summary generation on completion.
+- **Fires:** Only during `/process-meetings`
+
+### career-evidence-capture.cjs
+
+- **Trigger:** PostToolUse (Write matcher)
+- **Skill:** `/career-coach`
+- **What it does:** Detects achievement markers (percentages, metrics, outcomes) in career files and auto-logs to the Career Evidence Log.
+- **Fires:** Only during `/career-coach`
+
+### daily-plan-quick-ref.cjs
+
+- **Trigger:** Stop
+- **Skill:** `/daily-plan`
+- **What it does:** Generates a condensed quickref file (<50 lines) from the daily plan — top focus items, key meetings, time blocks.
+- **Output:** `00-Inbox/Daily_Prep/YYYY-MM-DD-quickref.md`
+
+## Utility Hooks
+
+### maintenance.cjs
+
+- **Trigger:** Manual (`node .claude/hooks/maintenance.cjs`) or ask Dex to "run vault maintenance"
+- **What it does:** Vault health checks — stale inbox files (>30 days), broken WikiLinks, orphaned person pages, agent memory cleanup (>90 days).
+- **Output:** Health report to stdout
 
 ---
 

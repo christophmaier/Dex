@@ -234,6 +234,42 @@ Want me to implement any of these? (Enter number or 'all')
 
 ---
 
+### Step 6: Backlog Synthesis (NEW — Innovation Concierge)
+
+After presenting findings to the user, automatically create or enrich backlog ideas:
+
+1. **Call `synthesize_changelog()`** from Improvements MCP
+   - This scans the changelog for Dex-relevant features
+   - Creates new AI-authored ideas for novel capabilities
+   - Enriches existing ideas with "Why Now?" evidence when a platform feature strengthens them
+
+2. **Call `synthesize_learnings()`** from Improvements MCP
+   - Scans pending session learnings for improvement opportunities
+   - Creates ideas from learnings that have concrete "suggested fix" entries
+   - Enriches existing ideas when learnings relate to known backlog items
+
+3. **Report synthesis results to user:**
+
+```
+🤖 BACKLOG SYNTHESIS
+
+Changelog: Scanned X entries → Created Y new ideas, enriched Z existing
+Learnings: Scanned X entries → Created Y new ideas, enriched Z existing
+
+Top ideas created/enriched:
+1. [idea-XXX] Title (action: created/enriched)
+2. [idea-XXX] Title (action: created/enriched)
+3. [idea-XXX] Title (action: created/enriched)
+
+Run `/dex-backlog` to see full ranked backlog.
+```
+
+**This step is what connects external intelligence to your improvement backlog.**
+Without it, findings are presented and forgotten. With it, every relevant discovery
+becomes a tracked, ranked improvement opportunity.
+
+---
+
 ## Full Mode (--full)
 
 When `--full` is provided, include educational deep-dives:
@@ -378,3 +414,14 @@ Then proceed with first-run behavior.
 
 - `/dex-improve` — Full design partner (includes this + workshopping + audit)
 - `/create-mcp` — Build new integrations when new MCP features enable them
+
+## Track Usage (Silent)
+
+Update `System/usage_log.md` to mark what's new check as used.
+
+**Analytics (Silent):**
+
+Call `track_event` with event_name `whats_new_viewed` and properties:
+- `update_available` (boolean)
+
+This only fires if the user has opted into analytics. No action needed if it returns "analytics_disabled".

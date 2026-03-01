@@ -1,6 +1,7 @@
 ---
 name: week-review
 description: Review week's progress with concrete accomplishments (not fake percentages), pattern detection, and goal tracking.
+context: fork
 ---
 
 ## Purpose
@@ -66,6 +67,35 @@ For each weekly priority:
 > 3. ❌ **Customer interviews** — Not started
 >    - Reason: Calendar was too stacked
 >    - Recommendation: Carry to next week with protected time"
+
+### 1.5 Semantic Goal-to-Work Mapping (if QMD available)
+
+**Check if semantic search is available** by looking for `qmd` in PATH.
+
+If available, enhance the weekly priority review with meaning-based analysis:
+
+1. **Auto-detect goal contributions:** For each completed task this week, search:
+   ```
+   qmd query "task title/description" --limit 3
+   ```
+   against quarterly goals. Catch tasks that advanced goals without explicit links.
+   - Example: "Built customer health dashboard" semantically matches goal "Improve NPS tracking" — different words, same work.
+
+2. **Cross-priority connections:** Search for work that bridges multiple priorities:
+   ```
+   qmd query "priority 1 description" --limit 5
+   ```
+   Surface tasks that contributed to more than one priority.
+
+3. **Thematic patterns:** Search for recurring themes across the week's work:
+   ```
+   qmd query "common theme from meetings/tasks" --limit 5
+   ```
+   Detect patterns like "most of your work this week clustered around customer retention" even when tasks used different terminology.
+
+**Integration:** Merge findings into the Quarterly Goals table — add a "Hidden contributions" row for semantically-detected but not explicitly-linked work. Only show genuinely new connections, not things already captured by keyword matching.
+
+**If QMD unavailable:** Skip silently. Task completion stats still work fine.
 
 ### 2. Task Completion Stats (Concrete Numbers)
 
@@ -167,6 +197,31 @@ Use: get_commitment_stats(
 
 **If no commitment data:**
 Skip this section silently (user may not have ScreenPipe or commitment detection enabled).
+
+### 5.8 Email Communication Stats (if Gmail connected)
+
+Check `System/integrations/config.yaml` for `google-workspace.enabled: true`.
+
+If enabled and Google Workspace MCP is healthy:
+- **Emails sent this week** — count of sent messages in the review period
+- **Average response time** — how quickly you replied to incoming emails
+- **Threads still open** — conversations with no resolution (back-and-forth still active)
+- **Follow-up detection** — emails waiting > 48h for a reply from you or from others
+
+Surface in the review:
+
+> "**Email this week:**
+>
+> | Metric | Value |
+> |--------|-------|
+> | Emails sent | 47 |
+> | Avg response time | 3.2 hours |
+> | Open threads | 12 |
+> | Awaiting your reply (> 48h) | 3 |
+>
+> **Observation:** You have 3 emails waiting for replies longer than 48 hours. Consider clearing those early next week."
+
+If unhealthy or not enabled: skip this section silently.
 
 ### 6. Learning Compilation & Pattern Detection
 
@@ -350,6 +405,62 @@ Based on this week's progress:
 
 ---
 
+## Innovation Concierge: Top 3 This Week
+
+At the end of the weekly review, surface the top backlog ideas:
+
+1. Call `list_ideas(status="active", min_score=70)` from Improvements MCP
+2. Pick the top 3 ideas by score that haven't been surfaced in the last week review
+3. Include in the output format as a section:
+
+```markdown
+## 🤖 Top 3 Dex Improvement Ideas
+
+Your AI-curated backlog has surfaced these high-impact ideas:
+
+1. **[idea-XXX]** Title (Score: XX)
+   Why now: [Brief evidence or timeliness reason]
+
+2. **[idea-XXX]** Title (Score: XX)
+   Why now: [Brief evidence]
+
+3. **[idea-XXX]** Title (Score: XX)
+   Why now: [Brief evidence]
+
+> Interested? Run `/dex-improve [idea-id]` to workshop any of these.
+> Run `/dex-backlog` to see the full ranked backlog.
+```
+
+**Rules:**
+- Only show ideas with score >= 70 (don't surface low-value noise)
+- Prefer ideas with recent "Why Now?" evidence
+- If fewer than 3 qualifying ideas, show however many exist
+- If no qualifying ideas, skip this section entirely
+- This is a gentle nudge, not a sales pitch
+
+---
+
+## Skill Quality Insights
+
+After generating the synthesis, call `get_skill_ratings()` from Work MCP (no filter — get all skills).
+
+**If ratings exist for any skills:**
+Add a section to the review:
+
+```markdown
+## Skill Quality This Week
+
+| Skill | Avg Rating | Trend | Note |
+|-------|-----------|-------|------|
+| [skill] | [avg]/5 | [improving/stable/declining] | [most recent note] |
+```
+
+**Only surface skills that are declining or below 3.0.** If everything is stable/good, skip this section entirely. One line for healthy, only details for problems.
+
+**Then:** Run `/identity-snapshot` to update `System/identity-model.md` with fresh data from this week.
+
+---
+
 ## Follow-up Actions
 
 After synthesis:
@@ -366,3 +477,18 @@ After synthesis:
 |-------------|------------|------------|
 | Work | dex-work-mcp | `list_tasks`, `get_week_progress`, `get_quarterly_goals`, `get_goal_status` |
 | Calendar | dex-calendar-mcp | `calendar_get_events_with_attendees` |
+| Improvements | dex-improvements-mcp | `list_ideas` |
+| Analytics | dex-analytics | `track_event` |
+
+---
+
+## Track Usage (Silent)
+
+Update `System/usage_log.md` to mark weekly review as used.
+
+**Analytics (Silent):**
+
+Call `track_event` with event_name `week_review_completed` and properties:
+- `priorities_completed`: number of priorities completed
+- `priorities_total`: total number of priorities
+- `tasks_completed`: number of tasks completed this weekThis only fires if the user has opted into analytics. No action needed if it returns "analytics_disabled".

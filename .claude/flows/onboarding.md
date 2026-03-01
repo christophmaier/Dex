@@ -12,17 +12,15 @@ Guide new users through setup in a friendly ~5 minute conversation. Keep it simp
 
 **After each step (1-6):** Call `validate_and_save_step(step_number=X, step_data={...})` before proceeding. If validation fails, show the error and retry the step.
 
-### Interactive Questions (IMPORTANT)
+### Platform Detection (do this once, before Step 1)
 
-When this flow says to present a structured choice, you MUST use the correct tool for the user's environment:
+Detect which question tool is available so all subsequent steps use the right one:
 
-- **Cursor:** Call the `AskQuestion` tool. This renders clickable option buttons in the Cursor UI.
-- **Claude Code CLI:** Call the `AskUserQuestion` tool. Same purpose, different tool name.
-- **Neither available:** Fall back to presenting numbered text options and asking the user to type their choice.
+- If the `AskQuestion` tool is available → you are in **Cursor**. Use `AskQuestion` for all choice prompts.
+- If the `AskUserQuestion` tool is available → you are in **Claude Code** (CLI or Desktop). Use `AskUserQuestion` for all choice prompts.
+- If neither tool is available → use **numbered text options** and accept typed responses.
 
-**How to detect:** Try `AskQuestion` first (works in Cursor). If it fails or isn't recognized, try `AskUserQuestion` (Claude Code). If neither works, use text fallback.
-
-**CRITICAL:** You must actually INVOKE the tool, not just show the JSON schema. The user should see clickable buttons, not raw JSON.
+Remember this for the rest of onboarding. Every step that says "present options" should use whichever tool you detected here. The JSON schemas below work identically for both `AskQuestion` and `AskUserQuestion`.
 
 ---
 
@@ -42,62 +40,57 @@ Let's get you set up. First, what's your name?"
 
 Ask: "What's your role?"
 
-Present this numbered list:
-
-```
-**Core Functions**
-1. Product Manager
-2. Sales / Account Executive
-3. Marketing
-4. Engineering
-5. Design
-
-**Customer-Facing**
-6. Customer Success
-7. Solutions Engineering
-
-**Operations**
-8. Product Operations
-9. RevOps / BizOps
-10. Data / Analytics
-
-**Support Functions**
-11. Finance
-12. People (HR)
-13. Legal
-14. IT Support
-
-**Leadership**
-15. Founder
-
-**C-Suite**
-16. CEO
-17. CFO
-18. COO
-19. CMO
-20. CRO
-21. CTO
-22. CPO
-23. CIO
-24. CISO
-25. CHRO / Chief People Officer
-26. CLO / General Counsel
-27. CCO (Chief Customer Officer)
-
-**Independent / Advisory**
-28. Fractional CPO
-29. Consultant
-30. Coach
-
-**Investment**
-31. Venture Capital / Private Equity
-
-Type a number, or describe your role if it's not listed:
+Present options using your detected platform tool (see "Platform Detection" above):
+```json
+{
+  "questions": [{
+    "id": "role",
+    "prompt": "What's your role?",
+    "allow_multiple": false,
+    "options": [
+      {"id": "1", "label": "Product Manager"},
+      {"id": "2", "label": "Sales / Account Executive"},
+      {"id": "3", "label": "Marketing"},
+      {"id": "4", "label": "Engineering"},
+      {"id": "5", "label": "Design"},
+      {"id": "6", "label": "Customer Success"},
+      {"id": "7", "label": "Solutions Engineering"},
+      {"id": "8", "label": "Product Operations"},
+      {"id": "9", "label": "RevOps / BizOps"},
+      {"id": "10", "label": "Data / Analytics"},
+      {"id": "11", "label": "Finance"},
+      {"id": "12", "label": "People (HR)"},
+      {"id": "13", "label": "Legal"},
+      {"id": "14", "label": "IT Support"},
+      {"id": "15", "label": "Founder"},
+      {"id": "16", "label": "CEO"},
+      {"id": "17", "label": "CFO"},
+      {"id": "18", "label": "COO"},
+      {"id": "19", "label": "CMO"},
+      {"id": "20", "label": "CRO"},
+      {"id": "21", "label": "CTO"},
+      {"id": "22", "label": "CPO"},
+      {"id": "23", "label": "CIO"},
+      {"id": "24", "label": "CISO"},
+      {"id": "25", "label": "CHRO / Chief People Officer"},
+      {"id": "26", "label": "CLO / General Counsel"},
+      {"id": "27", "label": "CCO (Chief Customer Officer)"},
+      {"id": "28", "label": "Fractional CPO"},
+      {"id": "29", "label": "Consultant"},
+      {"id": "30", "label": "Coach"},
+      {"id": "31", "label": "Venture Capital / Private Equity"},
+      {"id": "other", "label": "My role isn't listed"}
+    ]
+  }]
+}
 ```
 
-Accept numbers, role names, or hybrid descriptions like "I'm mostly PM but do some engineering."
+**If user selects "My role isn't listed" (id: "other"):**
+Ask: "What's your role? Describe it however makes sense — I'll tailor the system accordingly."
+Then call `validate_and_save_step(step_number=2, step_data={"role": "[their description]", "role_group": "Custom"})`.
 
-**After receiving role:** Call `validate_and_save_step(step_number=2, step_data={"role_number": X})` or `{"role": "...", "role_group": "..."}` to validate and save.
+**If user selects a numbered role:**
+Call `validate_and_save_step(step_number=2, step_data={"role_number": [selected id as integer]})` to validate and save.
 
 ---
 
@@ -105,8 +98,7 @@ Accept numbers, role names, or hybrid descriptions like "I'm mostly PM but do so
 
 Ask: "What's your company size?"
 
-**CALL the interactive question tool** (see "Interactive Questions" section above) with these parameters:
-
+Present options using your detected platform tool:
 ```json
 {
   "questions": [{
@@ -122,8 +114,6 @@ Ask: "What's your company size?"
   }]
 }
 ```
-
-**Text fallback** (if tool not available): Present the 4 options as a numbered list and ask the user to type 1-4.
 
 **After receiving company size:** Call `validate_and_save_step(step_number=3, step_data={"company": "...", "company_size": "[selected id]"})` to validate and save. The `company_size` value should be the option id (startup, scaling, enterprise, or large_enterprise).
 
@@ -162,10 +152,27 @@ Ask: "What's your company email domain? This helps me automatically:
 
 **How to check calendar count:**
 
-Run this AppleScript to count calendars:
+Run this AppleScript to count calendars (launch first to ensure it's queryable):
 ```bash
-osascript -e 'tell application "Calendar" to return count of calendars'
+osascript -e 'launch application "Calendar"' && sleep 1 && osascript -e 'tell application "Calendar" to return count of calendars'
 ```
+
+**If the command fails** (Calendar not installed, permissions denied, etc.):
+
+First, check if it's a permissions issue (common on macOS with Cursor/Claude Desktop):
+
+Say: "Your calendar app is installed but your editor doesn't have permission to access it yet. This is a one-time macOS setup:
+
+1. Open **System Settings** → **Privacy & Security** → **Calendars**
+2. Find **Cursor** (or **Claude Desktop**) in the list and turn it **on**
+3. If it's not in the list yet, run this in your terminal inside Cursor: `osascript -e 'tell application \"Calendar\" to get name of calendars'` — macOS will prompt you to allow access
+4. After granting access, come back here and we'll continue
+
+**Can't do this right now?** No problem — calendar features will work once you grant permission later. Moving on!"
+
+- Do NOT skip silently — always explain the permission step
+- Don't block onboarding — let the user continue if they prefer to do it later
+- Store `calendar.permissions_pending: true` in user-profile.yaml if they skip
 
 **If 1-2 calendars:**
 - Skip this step silently
@@ -263,7 +270,7 @@ You'll see this hierarchy in action as you use the system."
 
 Say: "Quick preferences check—how should I communicate with you?"
 
-**CALL the interactive question tool** (see "Interactive Questions" section above) to present these 3 questions. If the tool is not available, ask the same questions as numbered text options:
+Present these 3 questions using your detected platform tool. If using text fallback, show numbered options for each:
 
 1. **Formality Level:**
    - Formal (professional, structured)
@@ -312,8 +319,7 @@ Say: "One more thing—do you use **Obsidian** to view your notes?
 
 **New to Obsidian?** [Watch this beginner's guide](https://www.youtube.com/watch?v=gafuqdKwD_U) to see what it can do (5 min)."
 
-**CALL the interactive question tool** (see "Interactive Questions" section above) with these parameters:
-
+Present options using your detected platform tool:
 ```json
 {
   "questions": [{
@@ -328,8 +334,6 @@ Say: "One more thing—do you use **Obsidian** to view your notes?
   }]
 }
 ```
-
-**Text fallback:** "Type 1 for Yes, 2 for No, 3 for Not sure"
 
 **If YES (id: "yes"):**
 1. Set `obsidian_mode: true` in session data
@@ -381,9 +385,113 @@ The MCP returns a summary of what was created (folders, files, configs).
 
 Show the summary from the MCP response.
 
-## Step 8: Optional Features
+## Step 8: Connect Your Tools (Integration Discovery)
 
-Say: "The core system is ready. A couple optional add-ons you can set up now or skip:
+**This step uses the Integration Concierge to intelligently recommend tool connections based on what's already in the user's vault.**
+
+### 8a: Run Integration Concierge
+
+Execute the vault scanner to detect tool signals:
+
+```bash
+node .claude/hooks/integration-concierge.cjs
+```
+
+Parse the JSON output. It returns four tiers:
+- `high_value` — Strong signals (score >= 5), high-confidence recommendations
+- `moderate_value` — Some signals (score 1-4), worth mentioning
+- `available` — No signals but available for connection
+- `already_connected` — Already enabled in config.yaml
+
+### 8b: Present Recommendations
+
+Say: "Now the fun part — I just scanned your vault to see what tools you use."
+
+**IF high_value integrations found:**
+
+```
+**Based on your notes, these would make the biggest difference:**
+
+[For each high_value item:]
+- **[name]** — Found [mentions] references in your notes ([list example files])
+  → [value proposition]
+  Setup time: [setupTime] | Auth: [auth type]
+  [If item has a note field, show it as an italicized aside]
+
+[IF moderate_value also found:]
+**Also available (fewer signals, but useful):**
+[For each moderate_value item:]
+- **[shortName]** — [mentions] mention(s). [value proposition]. Setup: [setupTime]
+
+[IF available items:]
+**Other integrations you can add anytime:**
+[Comma-separated list of shortNames from available items]
+```
+
+**IF NO high_value found but moderate_value found:**
+
+```
+**I found a few tool signals in your notes:**
+
+[For each moderate_value item:]
+- **[name]** — [mentions] mention(s) in your notes
+  → [value proposition]
+  Setup time: [setupTime] | Auth: [auth type]
+
+**Other integrations available anytime:**
+[Comma-separated list of shortNames from available items]
+```
+
+**IF NO signals found at all (both high_value and moderate_value empty):**
+
+```
+**Here are the integrations available, organized by category:**
+
+**Communication & Email:**
+- Google Workspace (Gmail + Calendar + Docs) — Email digest, follow-up detection. Setup: 3 min
+- Microsoft Teams — Teams digest alongside Slack. Setup: 2 min
+
+**Task Management:**
+- Todoist — Two-way task sync. Setup: 1 min
+- Things 3 — Mac-native task sync, no account needed. Setup: 30 sec
+- Trello — Board sync, cards become tasks. Setup: 2 min
+
+**Meetings & Knowledge:**
+- Zoom — Recording access and scheduling. Setup: 2 min
+- Atlassian (Jira + Confluence) — Tickets and docs in daily plans. Setup: 3 min
+```
+
+**IF already_connected items exist, mention them:**
+
+```
+**Already connected:** [comma-separated list of shortNames]
+```
+
+**Then ask:**
+
+"Which ones would you like to connect? You can always add more later with `/integrate-mcp` or individual setup commands."
+
+### 8c: Connect Selected Integrations
+
+For each integration the user selects:
+
+1. Run its setup skill: invoke the skill referenced in the integration's `setup` field (e.g., `/todoist-setup`, `/gmail-setup`)
+2. Wait for the setup skill to complete (each includes auth, config, and verification)
+3. The setup skill shows its **Capability Cascade** at the end (from `integration-patterns.md`):
+   - Which existing skills just got smarter
+   - What new capabilities are now available
+   - Privacy and trust level summary
+4. Move to the next selected integration
+
+If the user selects multiple, run them in sequence. After each one, confirm success before moving to the next.
+
+If the user says "skip" or "none" or "later":
+
+Say: "No problem! You can connect tools anytime with `/integrate-mcp` or the individual setup commands. Run `/dex-level-up` to see what's available."
+
+### 8d: Optional Features (After Integrations)
+
+Say: "A couple more optional add-ons:
 
 - **Journaling** — Daily/weekly reflection prompts (2-3 min/day)
 - **Granola** — Automatic meeting processing (if you use it)
@@ -447,8 +555,7 @@ Say: "One quick question before we finish:
 
 **Help improve Dex?**"
 
-**CALL the interactive question tool** (see "Interactive Questions" section above) with these parameters:
-
+Present options using your detected platform tool:
 ```json
 {
   "questions": [{
@@ -462,8 +569,6 @@ Say: "One quick question before we finish:
   }]
 }
 ```
-
-**Text fallback:** "Type Yes or No"
 
 **If YES:**
 1. Update `System/user-profile.yaml`:

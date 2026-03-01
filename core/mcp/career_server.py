@@ -25,6 +25,22 @@ from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 import mcp.types as types
 
+# QMD semantic search (optional - gracefully degrade if not available)
+try:
+    from utils.qmd_query import is_qmd_available, vault_search
+    HAS_QMD = True
+except ImportError:
+    HAS_QMD = False
+
+# Analytics helper (optional - gracefully degrade if not available)
+try:
+    from analytics_helper import fire_event as _fire_analytics_event
+    HAS_ANALYTICS = True
+except ImportError:
+    HAS_ANALYTICS = False
+    def _fire_analytics_event(event_name, properties=None):
+        return {'fired': False, 'reason': 'analytics_not_available'}
+
 # Import parsing utilities
 from career_parser import (
     parse_evidence_file,
@@ -37,6 +53,14 @@ from career_parser import (
     parse_date_range,
     get_quarter_label,
 )
+
+# Health system — error queue and health reporting
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from core.utils.dex_logger import log_error as _log_health_error, mark_healthy as _mark_healthy
+    _HAS_HEALTH = True
+except ImportError:
+    _HAS_HEALTH = False
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -281,6 +305,23 @@ async def handle_call_tool(
                 text=json.dumps({"error": f"Unknown tool: {name}"}, indent=2)
             )]
     except Exception as e:
+        if _HAS_HEALTH:
+            _tool_human_messages = {
+                "scan_evidence": "Career evidence scan failed",
+                "parse_ladder": "Career ladder parsing failed",
+                "analyze_coverage": "Competency coverage analysis failed",
+                "timeline_analysis": "Career timeline analysis failed",
+                "scan_work_for_evidence": "Work evidence scan failed",
+                "skills_gap_analysis": "Skills gap analysis failed",
+                "generate_evidence_from_work": "Evidence generation failed",
+                "promotion_readiness_score": "Promotion readiness calculation failed",
+            }
+            _log_health_error(
+                source="career-mcp",
+                message=str(e),
+                human_message=_tool_human_messages.get(name, f"Career tool '{name}' failed"),
+                context={"tool": name},
+            )
         logger.error(f"Error in {name}: {e}", exc_info=True)
         return [types.TextContent(
             type="text",
@@ -357,6 +398,11 @@ async def handle_scan_evidence(arguments: dict) -> list[types.TextContent]:
             "category": category
         }
     }
+    
+    try:
+        _fire_analytics_event('career_evidence_scanned')
+    except Exception:
+        pass
     
     return [types.TextContent(
         type="text",
@@ -443,6 +489,10 @@ async def handle_analyze_coverage(arguments: dict) -> list[types.TextContent]:
     evidence_files = scan_evidence_directory(EVIDENCE_DIR, date_range)
     
     if not evidence_files:
+        try:
+            _fire_analytics_event('career_coverage_analyzed')
+        except Exception:
+            pass
         return [types.TextContent(
             type="text",
             text=json.dumps({
@@ -482,6 +532,11 @@ async def handle_analyze_coverage(arguments: dict) -> list[types.TextContent]:
         "analysis_date": datetime.now().isoformat(),
         **coverage_analysis
     }
+    
+    try:
+        _fire_analytics_event('career_coverage_analyzed')
+    except Exception:
+        pass
     
     return [types.TextContent(
         type="text",
@@ -764,16 +819,48 @@ async def handle_skills_gap_analysis(arguments: dict) -> list[types.TextContent]
             active_skills[skill]['sources'].append('task')
             active_skills[skill]['last_seen'] = datetime.now()
     
+    # 2.5 QMD semantic skill detection (if available)
+    # Finds skill demonstration without explicit # Career: tags
+    qmd_skill_evidence = {}
+    if HAS_QMD and is_qmd_available():
+        try:
+            for skill in required_skills:
+                results = vault_search(
+                    query=f"demonstrated {skill}",
+                    limit=3,
+                    min_score=0.3,
+                    fallback_glob="05-Areas/Career/Evidence/**/*.md"
+                )
+                for r in results:
+                    score = r.get('score', 0)
+                    if score >= 0.35:
+                        if skill not in qmd_skill_evidence:
+                            qmd_skill_evidence[skill] = []
+                        qmd_skill_evidence[skill].append({
+                            'filepath': r.get('filepath', ''),
+                            'snippet': r.get('snippet', '')[:150],
+                            'score': score
+                        })
+                        # Also register in active_skills if not already there
+                        if skill not in active_skills:
+                            active_skills[skill] = {'count': 0, 'last_seen': None, 'sources': []}
+                        active_skills[skill]['count'] += 1
+                        active_skills[skill]['sources'].append('semantic_detection')
+                        if not active_skills[skill]['last_seen']:
+                            active_skills[skill]['last_seen'] = datetime.now()
+        except Exception:
+            pass  # Graceful degradation
+    
     # 3. Identify gaps
     skills_gap = []
     stale_skills = []
     actively_developed = []
     
     for skill in required_skills:
-        # Fuzzy match against active skills
+        # Fuzzy match against active skills (now includes QMD-detected)
         matched = False
         for active_skill in active_skills.keys():
-            # Simple substring match - real implementation would use fuzzy matching
+            # Simple substring match + QMD semantic enhancement
             if skill.lower() in active_skill.lower() or active_skill.lower() in skill.lower():
                 matched = True
                 # Check if stale
@@ -807,7 +894,9 @@ async def handle_skills_gap_analysis(arguments: dict) -> list[types.TextContent]
         'skills_gap_count': len(skills_gap),
         'stale_skills': stale_skills,
         'stale_skills_count': len(stale_skills),
-        'coverage_percentage': round((len(actively_developed) / len(required_skills) * 100) if required_skills else 0, 1)
+        'coverage_percentage': round((len(actively_developed) / len(required_skills) * 100) if required_skills else 0, 1),
+        'semantic_evidence': qmd_skill_evidence if qmd_skill_evidence else None,
+        'semantic_search_used': bool(qmd_skill_evidence)
     }
     
     return [types.TextContent(
@@ -1074,6 +1163,11 @@ async def handle_promotion_readiness_score(arguments: dict) -> list[types.TextCo
         'score_breakdown': score_breakdown
     }
     
+    try:
+        _fire_analytics_event('promotion_readiness_checked')
+    except Exception:
+        pass
+    
     return [types.TextContent(
         type="text",
         text=json.dumps(result, indent=2, cls=DateTimeEncoder)
@@ -1086,6 +1180,8 @@ async def handle_promotion_readiness_score(arguments: dict) -> list[types.TextCo
 
 async def _main():
     """Async main entry point for the MCP server"""
+    if _HAS_HEALTH:
+        _mark_healthy("career-mcp")
     logger.info("Starting Dex Career MCP Server")
     logger.info(f"Vault path: {BASE_DIR}")
     logger.info(f"Career directory: {CAREER_DIR}")

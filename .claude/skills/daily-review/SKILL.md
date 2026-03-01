@@ -1,6 +1,7 @@
 ---
 name: daily-review
 description: End of day review with learning capture, daily plan completion tracking, and meeting follow-up surfacing.
+context: fork
 ---
 
 ## Purpose
@@ -156,6 +157,71 @@ Use: process_commitment(commitment_id="comm-XXXXXX-XXX", action="dismiss")
 
 ---
 
+## Step 2.5: Semantic Context Enrichment (if QMD available)
+
+**Check if semantic search is available** by looking for `qmd` in PATH. If available, use it to map today's work to priorities and goals more intelligently.
+
+### What to search:
+
+1. **Map completed tasks to goals:** For each task completed today, search semantically:
+   ```
+   qmd query "task description here" --limit 3
+   ```
+   Look for connections to quarterly goals or weekly priorities that keyword matching would miss. Example: completing "finalize stakeholder deck" might connect to a goal about "executive engagement strategy" — same concept, different words.
+
+2. **Enrich meeting follow-ups:** For each meeting today, search for related past discussions:
+   ```
+   qmd query "meeting topic" --limit 5
+   ```
+   Surface any commitments, decisions, or context from previous meetings on the same theme.
+
+3. **Priority alignment check:** For each weekly priority, search for today's work that advanced it:
+   ```
+   qmd query "priority title/description" --limit 5
+   ```
+   Catch work that moved the needle but wasn't explicitly tagged to the priority.
+
+### How to use results:
+
+- **Only surface genuinely new connections** — if a task was already linked to a goal, don't repeat it
+- Merge insights into the Plan vs. Reality section: "Task X also advanced Goal Y (semantic match)"
+- Add to the Weekly Priorities Progress section if semantic search reveals hidden progress
+- If QMD is not available, skip this step silently — the review works fine without it
+
+---
+
+## Step 2.6: Reminders Completion Sync (Dex Today → Dex)
+
+Check if tasks were completed on phone since the morning plan:
+
+```
+Use: reminders_list_completed(list_name="Dex Today")
+```
+
+For each completed item:
+- Match to a Dex task by title
+- Update task status via Work MCP: `update_task_status(task_title="...", status="d")`
+- Surface what was synced:
+
+> "📱 **Synced from phone:**
+> - ✅ "Follow up with Hero Coders" — marked done in Dex"
+
+Also check for tasks completed in Dex today that still have active Reminders:
+
+```
+# For each task completed today in Dex, check if a matching Reminder exists
+Use: reminders_find_and_complete(list_name="Dex Today", title_query="task title")
+```
+
+Clean up completed items:
+```
+Use: reminders_clear_completed(list_name="Dex Today")
+```
+
+**If nothing to sync:** Skip silently.
+
+---
+
 ## Step 3: Daily Plan Completion Tracking (NEW)
 
 **Compare what you planned vs. what you did.**
@@ -307,9 +373,39 @@ Suggest 3 focus items for tomorrow:
 
 ---
 
+## Step 9.5: Retrospective Insight (Innovation Concierge)
+
+At the end of the review, check if there's a relevant backlog idea to surface:
+
+1. Call `list_ideas(status="active", min_score=70)` from Improvements MCP
+2. Look for ideas that connect to today's work or learnings:
+   - Did the user work on tasks related to a backlog idea?
+   - Did learnings captured today strengthen an existing idea?
+   - Is there a "Why Now?" idea with fresh evidence?
+3. If a relevant match exists, surface it briefly:
+
+> **Retrospective Insight:** Today's meeting processing struggles connect to idea-027 (RAG-Powered Vault Search) — semantic search could make finding meeting context much faster. Worth exploring? Run `/dex-improve idea-027`.
+
+**Rules:**
+- Show at most 1 insight per review
+- Only show if genuinely connected to today's work (not random)
+- Frame as retrospective — "based on what you just did, here's what could help"
+- If no connection, skip entirely
+- Keep it to 1-2 lines max
+
+---
+
 ## Step 10: Track Usage (Silent)
 
-Update `System/usage_log.md`.
+Update `System/usage_log.md` to mark daily review as used.
+
+**Analytics (Silent):**
+
+Call `track_event` with event_name `daily_review_completed` and properties:
+- `wins_count`
+- `learnings_count`
+
+This only fires if the user has opted into analytics. No action needed if it returns "analytics_disabled".
 
 ---
 
@@ -447,12 +543,27 @@ Based on weekly priorities and today's carryover:
 
 ---
 
+## Step 12: Skill Quality Check (Gentle)
+
+After generating the review, call `get_skill_ratings(skill_name="daily-review")` from Work MCP.
+
+**If 3+ ratings exist and average has dropped below 3.0 over the last 5 entries:**
+Add one line at the end of the review output:
+> "Your daily reviews have been averaging [X]/5 lately. Common note: '[most recent note]'. Want to adjust the format?"
+
+**If no ratings exist or average is 3.0+:** Say nothing. Don't mention ratings at all.
+
+**Then:** Run `/identity-snapshot` silently in the background if `System/identity-model.md` is older than 7 days (check file mtime). Don't announce this.
+
+---
+
 ## MCP Dependencies
 
 | Integration | MCP Server | Tools Used |
 |-------------|------------|------------|
 | Work | dex-work-mcp | `list_tasks`, `get_week_progress`, `get_commitments_due`, `analyze_calendar_capacity` |
 | Calendar | dex-calendar-mcp | `calendar_get_today` |
+| Reminders | dex-calendar-mcp | `reminders_list_completed`, `reminders_find_and_complete`, `reminders_clear_completed` |
 | Screen Activity | screenpipe-mcp | `screenpipe_time_audit`, `screenpipe_summarize`, `screenpipe_query` |
 
 ### ScreenPipe Integration Notes

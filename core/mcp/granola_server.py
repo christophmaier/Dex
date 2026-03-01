@@ -17,6 +17,7 @@ import os
 import json
 import logging
 import platform
+import re
 import requests
 import time
 from pathlib import Path
@@ -27,6 +28,15 @@ from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 import mcp.types as types
+
+# Analytics helper (optional - gracefully degrade if not available)
+try:
+    from analytics_helper import fire_event as _fire_analytics_event
+    HAS_ANALYTICS = True
+except ImportError:
+    HAS_ANALYTICS = False
+    def _fire_analytics_event(event_name, properties=None):
+        return {'fired': False, 'reason': 'analytics_not_available'}
 
 # Granola paths (cross-platform)
 def get_granola_cache_path():
@@ -76,6 +86,15 @@ GRANOLA_CREDS = get_granola_creds_path()
 
 # Vault paths
 VAULT_PATH = Path(os.environ.get('VAULT_PATH', Path.cwd()))
+
+# Health system — error queue and health reporting
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from core.utils.dex_logger import log_error as _log_health_error, mark_healthy as _mark_healthy
+    _HAS_HEALTH = True
+except ImportError:
+    _HAS_HEALTH = False
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -208,11 +227,16 @@ def convert_api_doc_to_meeting_info(doc: Dict[str, Any]) -> Dict[str, Any]:
     if panel and isinstance(panel, dict):
         content = panel.get('content')
         if content and isinstance(content, dict):
-            # Convert ProseMirror to markdown
+            # Convert ProseMirror JSON to markdown
             notes = convert_prosemirror_to_markdown(content)
             if notes:
                 has_content = True
                 content_blocks = len(content.get('content', []))
+        elif content and isinstance(content, str):
+            # Convert HTML string to markdown (meetings recorded on other machines)
+            notes = convert_html_to_markdown(content)
+            if notes:
+                has_content = True
     
     # Extract participants
     participants = []
@@ -307,6 +331,40 @@ def convert_prosemirror_to_markdown(content: Dict[str, Any]) -> str:
     return markdown.strip()
 
 
+def convert_html_to_markdown(html: str) -> str:
+    """Convert HTML string content to basic Markdown.
+
+    Granola stores notes as HTML strings for meetings recorded on other machines,
+    rather than ProseMirror JSON. This handles that case.
+    """
+    if not html or not isinstance(html, str):
+        return ""
+
+    text = html
+    # Headings
+    text = re.sub(r'<h([1-6])[^>]*>(.*?)</h\1>', lambda m: '#' * int(m.group(1)) + ' ' + m.group(2) + '\n\n', text)
+    # Paragraphs
+    text = re.sub(r'<p[^>]*>(.*?)</p>', r'\1\n\n', text, flags=re.DOTALL)
+    # Line breaks
+    text = re.sub(r'<br\s*/?>', '\n', text)
+    # List items
+    text = re.sub(r'<li[^>]*>(.*?)</li>', r'- \1\n', text, flags=re.DOTALL)
+    # Bold
+    text = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', text)
+    text = re.sub(r'<b[^>]*>(.*?)</b>', r'**\1**', text)
+    # Italic
+    text = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', text)
+    text = re.sub(r'<i[^>]*>(.*?)</i>', r'*\1*', text)
+    # Code
+    text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', text)
+    # Strip remaining tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Clean up whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text.strip()
+
+
 # ============================================================================
 # CACHE CLIENT (Fallback data source)
 # ============================================================================
@@ -368,12 +426,30 @@ def extract_meeting_info_from_cache(doc: Dict[str, Any], transcripts: Dict[str, 
     created_at = doc.get('created_at', '')
     meeting_date = created_at.split('T')[0] if created_at else None
     
+    # Extract notes: try notes_markdown first, fall back to last_viewed_panel
+    notes = doc.get('notes_markdown', '')
+    if not notes:
+        panel = doc.get('last_viewed_panel')
+        if panel and isinstance(panel, dict):
+            panel_content = panel.get('content')
+            if panel_content and isinstance(panel_content, dict):
+                notes = convert_prosemirror_to_markdown(panel_content)
+        elif panel and isinstance(panel, str):
+            try:
+                parsed_panel = json.loads(panel)
+                if isinstance(parsed_panel, dict):
+                    panel_content = parsed_panel.get('content')
+                    if panel_content and isinstance(panel_content, dict):
+                        notes = convert_prosemirror_to_markdown(panel_content)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    
     return {
         'id': meeting_id,
         'title': doc.get('title', 'Untitled Meeting'),
         'date': meeting_date,
         'created_at': created_at,
-        'notes': doc.get('notes_markdown', ''),
+        'notes': notes,
         'has_transcript': bool(transcript),
         'transcript_length': len(transcript) if transcript else 0,
         'participants': participants,
@@ -489,8 +565,8 @@ def get_meeting_by_id_from_cache(cache: Dict[str, Any], meeting_id: str) -> Opti
             for t in sorted(transcript_entries, key=lambda x: x.get('start_timestamp', ''))
         ).strip()
     
-    # Add action items if present in notes
-    notes = doc.get('notes_markdown', '')
+    # Add action items if present in notes (uses notes from extract_meeting_info_from_cache which checks last_viewed_panel)
+    notes = info.get('notes', '')
     action_items = []
     for line in notes.split('\n'):
         line = line.strip()
@@ -581,9 +657,15 @@ def search_meetings_in_cache(
             results.append(extract_meeting_info_from_cache(doc, cache['transcripts'], meeting_id))
             continue
         
-        # Search in notes
-        notes = doc.get('notes_markdown', '').lower()
-        if query_lower in notes:
+        # Search in notes (check notes_markdown and last_viewed_panel)
+        notes = doc.get('notes_markdown', '')
+        if not notes:
+            panel = doc.get('last_viewed_panel')
+            if panel and isinstance(panel, dict):
+                panel_content = panel.get('content')
+                if panel_content and isinstance(panel_content, dict):
+                    notes = convert_prosemirror_to_markdown(panel_content)
+        if query_lower in notes.lower():
             results.append(extract_meeting_info_from_cache(doc, cache['transcripts'], meeting_id))
             continue
         
@@ -642,15 +724,18 @@ def search_meetings(query: str, days_back: int = 30, limit: int = 10) -> List[Di
                 results.append(convert_api_doc_to_meeting_info(doc))
                 continue
             
-            # Search in notes content
+            # Search in notes content (ProseMirror JSON or HTML string)
             panel = doc.get('last_viewed_panel', {})
             if isinstance(panel, dict):
-                content = panel.get('content', {})
-                if isinstance(content, dict):
+                content = panel.get('content')
+                notes_text = ""
+                if content and isinstance(content, dict):
                     notes_text = convert_prosemirror_to_markdown(content)
-                    if notes_text and query_lower in notes_text.lower():
-                        results.append(convert_api_doc_to_meeting_info(doc))
-                        continue
+                elif content and isinstance(content, str):
+                    notes_text = convert_html_to_markdown(content)
+                if notes_text and query_lower in notes_text.lower():
+                    results.append(convert_api_doc_to_meeting_info(doc))
+                    continue
             
             # Search in participant names
             attendees = doc.get('people', {}).get('attendees', [])
@@ -787,9 +872,34 @@ async def handle_call_tool(
     name: str, arguments: dict | None
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """Handle tool calls"""
-    
+    try:
+        return await _handle_call_tool_inner(name, arguments)
+    except Exception as e:
+        if _HAS_HEALTH:
+            _tool_human_messages = {
+                "granola_check_available": "Granola availability check failed",
+                "granola_get_recent_meetings": "Recent meetings lookup failed",
+                "granola_get_meeting_details": "Meeting details lookup failed",
+                "granola_search_meetings": "Meeting search failed",
+                "granola_get_today_meetings": "Today's meetings lookup failed",
+                "granola_get_extent": "Granola data extent lookup failed",
+            }
+            _log_health_error(
+                source="granola-mcp",
+                message=str(e),
+                human_message=_tool_human_messages.get(name, f"Granola tool '{name}' failed"),
+                context={"tool": name},
+            )
+        raise
+
+
+async def _handle_call_tool_inner(
+    name: str, arguments: dict | None
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Inner tool handler — wrapped by handle_call_tool for health reporting."""
+
     arguments = arguments or {}
-    
+
     if name == "granola_check_available":
         # Check API availability
         api_available = False
@@ -887,6 +997,11 @@ async def handle_call_tool(
             "data_source": meeting.get('source', 'unknown')
         }
         
+        try:
+            _fire_analytics_event('granola_meeting_viewed')
+        except Exception:
+            pass
+        
         return [types.TextContent(type="text", text=json.dumps(result, indent=2, cls=DateTimeEncoder))]
     
     elif name == "granola_search_meetings":
@@ -910,6 +1025,11 @@ async def handle_call_tool(
             "count": len(meetings),
             "data_source": meetings[0].get('source', 'unknown') if meetings else 'none'
         }
+        
+        try:
+            _fire_analytics_event('granola_meetings_searched')
+        except Exception:
+            pass
         
         return [types.TextContent(type="text", text=json.dumps(result, indent=2, cls=DateTimeEncoder))]
     
@@ -1046,6 +1166,8 @@ async def handle_call_tool(
 
 async def _main():
     """Async main entry point for the MCP server"""
+    if _HAS_HEALTH:
+        _mark_healthy("granola-mcp")
     logger.info("Starting Dex Granola MCP Server (API-first with cache fallback)")
     logger.info(f"API credentials: {GRANOLA_CREDS}")
     logger.info(f"Cache fallback: {GRANOLA_CACHE}")

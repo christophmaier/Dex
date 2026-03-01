@@ -1,9 +1,14 @@
 ---
 name: triage
 description: Strategically route orphaned files and extract scattered tasks
+model_hint: fast
 ---
 
 Cleanup and routing tool that finds standalone files and scattered tasks, then suggests where they belong using your current strategic context (Week Priorities + Quarterly Goals).
+
+## Execution Style
+
+This skill handles quick decisions. Be concise. Don't over-analyze. Make a routing decision and move on. Target: <2 seconds of thinking per item.
 
 ## What It Does
 
@@ -83,6 +88,47 @@ List any additional folders under `05-Areas/` that aren't People or Career:
 Parse `System/pillars.yaml`:
 - Extract pillar names, descriptions, and keywords
 - These inform categorization when no entity match is found
+
+---
+
+## Step 0.5: Semantic Matching Enhancement (if QMD available)
+
+**This step activates automatically when QMD is installed.** It dramatically improves routing accuracy by matching inbox items to goals, projects, and people by **meaning**, not just keywords.
+
+Check if QMD MCP tools are available by calling `qmd_status`. **If available:**
+
+After loading strategic context (Step 0), enhance matching with semantic search:
+
+1. **For each inbox item**, run:
+   ```
+   qmd_search(query="[item title + first 100 words of content]", limit=5)
+   ```
+   This finds vault content related by meaning. "Email about onboarding flow" matches "Q1 goal: improve activation rate" even though they share no keywords.
+
+2. **For task deduplication**, use semantic similarity instead of keyword overlap:
+   ```
+   qmd_search(query="[task description]", limit=3)
+   ```
+   Catches semantic duplicates: "Review Q1 metrics" detected as duplicate of "Check quarterly pipeline numbers".
+
+3. **For goal alignment scoring**, run:
+   ```
+   qmd_search(query="[item content]", limit=3)
+   ```
+   against quarterly goals and weekly priorities. Items semantically related to active goals get a +25 confidence boost.
+
+**How this changes matching:**
+
+| Aspect | Without QMD (keyword) | With QMD (semantic) |
+|--------|----------------------|---------------------|
+| Goal matching | Exact keyword overlap only | Meaning-based: "churn analysis" matches "retention goal" |
+| Duplicate detection | >60% string similarity | Semantic similarity: different words, same intent |
+| Person matching | Name must appear in text | Role/title references found: "the sales VP" → Sarah Chen |
+| Project matching | Project name in filename | Thematic connection: "pricing update" → "Acme Deal" project |
+
+**Merge semantic scores with entity scores** from Step 0. The combined confidence determines routing priority.
+
+**If QMD is not available:** Skip silently. The standard keyword-based matching in the steps below handles routing with existing patterns.
 
 ---
 
@@ -354,9 +400,11 @@ No configuration needed - triage adapts as your structure grows.
 
 Update `System/usage_log.md` to mark inbox triage as used.
 
-**Analytics (Beta Feature):**
-1. Call `check_beta_enabled(feature="analytics")` - if false, skip
-2. If beta enabled AND consent given, fire event:
-- Fire event: `triage_completed`
-- Properties: `items_processed`, `tasks_extracted`, `files_routed`
-- Only fires if BOTH: analytics beta activated AND opted in
+**Analytics (Silent):**
+
+Call `track_event` with event_name `triage_completed` and properties:
+- items_processed
+- tasks_extracted
+- files_routed
+
+This only fires if the user has opted into analytics. No action needed if it returns "analytics_disabled".

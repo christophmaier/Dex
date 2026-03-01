@@ -1,11 +1,27 @@
 ---
 name: process-meetings
 description: Process synced Granola meetings to update person pages, extract tasks, and organize meeting notes
+context: fork
+hooks:
+  PostToolUse:
+    - matcher: Write
+      type: command
+      command: "node .claude/hooks/post-meeting-person-update.cjs"
+  Stop:
+    - type: command
+      command: "node .claude/hooks/meeting-summary-generator.cjs"
 ---
 
 # Process Meetings
 
 Process meetings that have been synced from Granola by the background automation. Updates person pages, extracts tasks, and organizes meeting notes.
+
+## Background Execution
+
+This skill supports background execution. When invoked:
+1. Acknowledge: "Processing [N] meetings in the background. I'll let you know when done."
+2. Process all meetings
+3. On completion, provide summary: "[N] meetings processed. [X] person pages updated. [Y] action items created."
 
 ## How It Works
 
@@ -24,6 +40,24 @@ Meetings are synced automatically every 30 minutes by a background process. This
 - `--people-only`: Only update person/company pages (skip tasks)
 - `--no-todos`: Create notes but don't extract tasks
 - `--setup`: Install/check background automation
+
+## Pre-flight: Granola Migration Check
+
+Before processing meetings, check if the user can upgrade to mobile recording support. This check fails gracefully if the migration script does not exist yet (user has not updated).
+
+1. Run: `node .scripts/meeting-intel/check-granola-migration.cjs 2>/dev/null || echo '{"status":"not_applicable"}'`
+2. Parse the JSON output
+3. **If status is `migration_available`:**
+   - Say: "**New:** Granola now supports mobile recordings in Dex. To enable, you just need to sign in to Granola in your browser once (takes 10 seconds). Want to do that now?"
+   - If user says yes: Run `node .scripts/meeting-intel/granola-auth.cjs --setup` and wait for completion
+   - If user says no/not now: Say "No problem — your desktop meetings still sync normally. Whenever you want mobile recordings, just say 'enable mobile recordings' or run `/process-meetings` again." Then continue with existing processing.
+   - Only show this prompt once per session
+4. **If status is `token_expired`:**
+   - Say: "Your Granola sign-in has expired. Want to refresh it? (Your meetings still sync from the desktop app either way.)"
+   - If yes: Run `node .scripts/meeting-intel/granola-auth.cjs --setup`
+5. **If status is `authenticated` or `not_applicable`:** Continue silently
+
+---
 
 ## Process
 
@@ -156,6 +190,40 @@ For each unique external company domain:
    - Add any new contacts to "Key Contacts"
    - Add meeting to "Meeting History"
 
+### Step 4.5: Semantic Enrichment (if QMD available)
+
+**Check if semantic search is available** by looking for `qmd` in PATH.
+
+If available, enhance meeting processing with meaning-based intelligence:
+
+1. **Detect implicit commitments:** For each meeting's discussion notes, search semantically:
+   ```
+   qmd query "we should circle back on..." --limit 3
+   qmd query "let me think about..." --limit 3
+   ```
+   Catch soft commitments that regex action-item extraction misses.
+   - Examples: "we should probably revisit the pricing model" → implicit action item
+   - "I need to noodle on the migration approach" → implicit commitment
+   - "Let's reconnect after the board meeting" → implicit follow-up
+
+2. **Link meetings to projects:** For the meeting topic, search:
+   ```
+   qmd query "meeting topic/title" --limit 3
+   ```
+   against `04-Projects/` to auto-link the meeting to relevant projects that keyword matching would miss.
+
+3. **Enrich person context:** For each new person encountered, search:
+   ```
+   qmd query "person name + company" --limit 3
+   ```
+   Find if they've been mentioned in other meetings/notes, even if they weren't a direct participant.
+
+**Integration:**
+- Add implicit commitments to the action items list with a note: "*(detected — not explicitly stated)*"
+- Add project links to meeting frontmatter
+- Merge person context into newly-created person pages
+- If QMD unavailable, skip silently — regex extraction still works
+
 ### Step 5: Extract Tasks (unless --no-todos or --people-only)
 
 For each meeting with unextracted tasks:
@@ -255,9 +323,11 @@ For each meeting with unextracted tasks:
 
 Update `System/usage_log.md` to mark meeting processing as used.
 
-**Analytics (Beta Feature):**
-1. Call `check_beta_enabled(feature="analytics")` - if false, skip
-2. If beta enabled AND consent given, fire event:
-- Fire event: `meetings_processed`
-- Properties: `meetings_count`, `people_created`, `todos_extracted`
-- Only fires if BOTH: analytics beta activated AND opted in
+**Analytics (Silent):**
+
+Call `track_event` with event_name `meetings_processed` and properties:
+- `meetings_count`: number of meetings processed
+- `people_created`: number of new person pages created
+- `todos_extracted`: number of tasks extracted
+
+This only fires if the user has opted into analytics. No action needed if it returns "analytics_disabled".

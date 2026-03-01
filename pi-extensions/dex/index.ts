@@ -21,8 +21,9 @@ import { Type, type Static } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Text, Container, Markdown } from "@mariozechner/pi-tui";
 import { registerOrchestratorTools } from "./orchestrator.js";
-import { registerCommitmentDetector } from "./commitment-detector.js";
+// DISABLED: import { registerCommitmentDetector } from "./commitment-detector.js";
 import { registerModelRouter } from "./model-router.js";
+import { registerRitualCommandBar } from "./ritual-command-bar.js";
 
 const execAsync = promisify(exec);
 
@@ -934,15 +935,14 @@ export default function (pi: ExtensionAPI) {
           }
         }
         
-        // 3. Calculate remaining focus hours from now until 6pm UK time
+        // 3. Calculate remaining focus hours from now until 6pm local time
         // NOTE: Calendar query is SLOW (15-45s) so we skip it on startup
         // Use time-based estimate instead. User can ask about calendar explicitly.
         let focusHoursAvailable = 0;
         
         const now = new Date();
-        const ukTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/London" }));
-        const currentHour = ukTime.getHours();
-        const currentMinute = ukTime.getMinutes();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
         const minutesUntil6pm = Math.max(0, (18 * 60) - (currentHour * 60 + currentMinute));
         focusHoursAvailable = minutesUntil6pm / 60;
         
@@ -954,7 +954,16 @@ export default function (pi: ExtensionAPI) {
         };
         
         ctx.ui.setWidget("dex-dashboard", (_tui, _theme) => ({
-          render: (width) => dashboard.renderDashboard(dashboardData, width),
+          render: (width) => {
+            try {
+              return dashboard.renderDashboard(dashboardData, width);
+            } catch (error) {
+              // Fallback: disable widget if render fails
+              ctx.ui.setWidget("dex-dashboard", undefined);
+              console.error("[Dex] Dashboard render error:", error);
+              return [];
+            }
+          },
           invalidate: () => {},
         }), { placement: "belowEditor" });
         
@@ -1408,17 +1417,15 @@ export default function (pi: ExtensionAPI) {
             focusHoursAvailable = dashboard.calculateRemainingFocusTime(events);
           } else {
             const now = new Date();
-            const ukTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/London" }));
-            const currentHour = ukTime.getHours();
-            const currentMinute = ukTime.getMinutes();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
             const minutesUntil6pm = Math.max(0, (18 * 60) - (currentHour * 60 + currentMinute));
             focusHoursAvailable = minutesUntil6pm / 60;
           }
         } catch {
           const now = new Date();
-          const ukTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/London" }));
-          const currentHour = ukTime.getHours();
-          const currentMinute = ukTime.getMinutes();
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
           const minutesUntil6pm = Math.max(0, (18 * 60) - (currentHour * 60 + currentMinute));
           focusHoursAvailable = minutesUntil6pm / 60;
         }
@@ -1431,7 +1438,16 @@ export default function (pi: ExtensionAPI) {
         };
         
         ctx.ui.setWidget("dex-dashboard", (_tui, _theme) => ({
-          render: (width) => dashboard.renderDashboard(dashboardData, width),
+          render: (width) => {
+            try {
+              return dashboard.renderDashboard(dashboardData, width);
+            } catch (error) {
+              // Fallback: disable widget if render fails
+              ctx.ui.setWidget("dex-dashboard", undefined);
+              console.error("[Dex] Dashboard render error:", error);
+              return [];
+            }
+          },
           invalidate: () => {},
         }), { placement: "belowEditor" });
         
@@ -1458,14 +1474,20 @@ export default function (pi: ExtensionAPI) {
   registerOrchestratorTools(pi);
   
   // =========================================================================
-  // REGISTER COMMITMENT DETECTOR (Ambient Intelligence)
+  // REGISTER COMMITMENT DETECTOR (Ambient Intelligence) - DISABLED
   // =========================================================================
   
-  registerCommitmentDetector(pi);
+  // registerCommitmentDetector(pi);
   
   // =========================================================================
   // REGISTER MODEL ROUTER (Smart Model Selection)
   // =========================================================================
-  
+
   registerModelRouter(pi);
+
+  // =========================================================================
+  // REGISTER RITUAL COMMAND BAR (Contextual Ritual Guidance)
+  // =========================================================================
+
+  registerRitualCommandBar(pi);
 }
