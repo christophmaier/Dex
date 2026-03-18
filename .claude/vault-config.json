@@ -1,0 +1,14 @@
+{
+  "user": {
+    "name": "Christoph Maier",
+    "role": "Product Leader",
+    "companySize": "enterprise",
+    "pillars": [
+      "Job Search",
+      "AI Mastery",
+      "Berlin Network",
+      "Build & Ship"
+    ]
+  },
+  "createdAt": "2026-02-15"
+}

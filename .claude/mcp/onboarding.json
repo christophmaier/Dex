@@ -1,0 +1,12 @@
+{
+  "name": "onboarding",
+  "description": "Stateful onboarding with validation and session management",
+  "server": {
+    "command": "python",
+    "args": ["core/mcp/onboarding_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  },
+  "notes": "Handles first-time setup with step validation, session resumption, and dependency verification"
+}

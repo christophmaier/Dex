@@ -8,7 +8,7 @@
 
 ## Core Workflows (8 features)
 
-- [x] Daily planning (`/daily-plan`)
+- [x] Daily planning (`/daily-plan`) — last run 2026-03-02
 - [ ] Daily review (`/review` or `/daily-review`)
 - [ ] Weekly planning (`/week-plan`)
 - [ ] Weekly review (`/week-review`)
@@ -116,10 +116,10 @@
 
 Tracks whether user has been asked about anonymous feature usage tracking.
 
-- **Consent asked:** false
-- **Consent decision:** pending
-- **Consent date:** (not yet decided)
-- **Last prompted:** (not yet prompted)
+- **Consent asked:** true
+- **Consent decision:** opted-in
+- **Consent date:** 2026-03-02
+- **Last prompted:** 2026-03-02
 
 **Values:**
 - `Consent decision: pending` → Not yet decided (will be asked each session until they choose)
