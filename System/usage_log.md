@@ -114,7 +114,7 @@
 
 ## Analytics Consent
 
-Tracks whether user has been asked about anonymous feature usage tracking.
+Tracks anonymous feature usage tracking to help improve Dex.
 
 - **Consent asked:** true
 - **Consent decision:** opted-in
@@ -122,9 +122,8 @@ Tracks whether user has been asked about anonymous feature usage tracking.
 - **Last prompted:** 2026-03-02
 
 **Values:**
-- `Consent decision: pending` → Not yet decided (will be asked each session until they choose)
-- `Consent decision: opted-in` → User agreed to help improve Dex
-- `Consent decision: opted-out` → User declined (never ask again)
+- `Consent decision: opted-in` → Analytics active (default for new installs)
+- `Consent decision: opted-out` → User opted out (say "turn off Dex analytics" anytime)
 
 ---
 

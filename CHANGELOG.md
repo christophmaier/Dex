@@ -7,6 +7,106 @@ All notable changes to Dex will be documented in this file.
 
 ---
 
+## [1.19.0] — Semantic Search Now Covers Your Entire Vault (2026-03-23)
+
+### 🔍 Semantic Search Now Covers Your Entire Vault
+
+**Before:** Smart search only covered 6 folders — meetings, people, projects,
+accounts, tasks, and goals. Finding anything in your PRDs, plans, or session
+learnings required remembering exact keywords.
+
+**Now:** Semantic search covers 14 collections across your whole vault.
+PRDs, implementation plans, session learnings, and resource docs are all
+searchable by meaning.
+
+**Result:** Ask "what did we decide about notifications?" or "find past work
+on MCP integration" — Dex finds the right content wherever it lives.
+
+**To pick up new collections:** Run `/enable-semantic-search`.
+
+---
+
+## [1.18.3] — Fix Python Install on Modern Macs + Atlassian MCP Config (2026-03-21)
+
+**Python/pip fix (affects most macOS users with Homebrew):**
+
+`install.sh` and `/dex-update` used `pip3` to install Python helpers, which fails on modern Macs with Homebrew Python (and recent Linux) due to a Python safety rule called PEP 668 — the system refuses direct pip installs. The `--user` fallback also fails in many setups.
+
+Dex now creates a private sandboxed Python environment (`.venv/`) inside your vault folder and installs all dependencies there. This works on all platforms and never touches your system Python.
+
+**What changed:**
+* `install.sh` creates `.venv/` and installs deps via the venv pip — no more PEP 668 errors
+* `.mcp.json` now points MCP servers to the venv Python instead of system `python3`
+* `/dex-update` uses the venv pip when updating dependencies, creating the venv first if upgrading from an older Dex install
+* Windows path handled automatically (`.venv/Scripts/python.exe`)
+
+**Atlassian MCP fix:**
+
+`/atlassian-setup` and `.mcp.json.example` referenced `@anthropic/atlassian-mcp` — a package that doesn't exist on npm. Atlassian's official MCP is a remote server, not an npm package.
+
+**What changed:**
+* Atlassian MCP config now uses `mcp-remote@latest` pointing to `https://mcp.atlassian.com/v1/sse`
+* No credentials needed in the config — authentication is handled via the OAuth browser flow
+
+**What you need to do:** Run `/dex-update` to get these fixes. If your install previously failed on the Python step, run `./install.sh` again.
+
+---
+
+## [1.18.2] — Fix Background Meeting Sync Installation (2026-03-12)
+
+`install-automation.sh` failed because it referenced two files that no longer exist: `granola-auth.cjs` (deprecated — Granola now stores credentials in `supabase.json` automatically) and `sync-from-granola-v2.cjs` (never shipped — v1 works fine).
+
+**What changed:**
+
+* Plist template now points to `sync-from-granola.cjs` (the script that actually exists)
+* Install script checks for `supabase.json` instead of calling the removed `granola-auth.cjs`
+* No more interactive browser auth step — Granola handles credentials automatically
+* `--auth` flag now checks credential status instead of launching a dead script
+
+**What you need to do:** Run `./install-automation.sh` again — it should complete without errors now.
+
+---
+
+## [1.18.1] — Meeting Sync Now Works Reliably Again (2026-03-05)
+
+In v1.17.0, we switched background meeting sync to use Granola's official MCP server — thinking the "official" route would be more reliable. Turns out, the MCP server sends meeting data back in a format designed for AI to read in conversation, not for code to process in the background. The sync script expected structured data, got free-form text, couldn't make sense of it, and quietly fell back to old cached data. Meetings were going missing with no error message.
+
+We've switched to using Granola's direct API instead. It returns clean structured data, includes mobile recordings, and uses the same credentials Granola already stores on your machine — no separate sign-in needed.
+
+**What this means for you:**
+
+* Meeting sync is reliable again — no more silent failures
+* Mobile recordings still sync (that wasn't the problem — the data source was)
+* One fewer thing to authenticate: no separate Granola MCP sign-in step
+* If you previously ran through the MCP OAuth setup, you don't need to do anything — the new approach uses your existing Granola sign-in automatically
+
+**What changed under the hood:**
+
+* Background sync now uses Granola's direct API (`api.granola.ai`) instead of the MCP server
+* Removed `granola-mcp-client.cjs`, `granola-auth.cjs`, and `check-granola-migration.cjs` — no longer needed
+* Local cache remains as fallback for offline scenarios
+
+---
+
+## [1.18.0] — Intelligent Model Routing Metadata + Safer Skill Updates (2026-03-02)
+
+Dex skills now carry explicit model-routing metadata so cheap/fast models can be used for simple work while higher-tier models stay reserved for heavier thinking.
+
+**What this means for you:**
+- Many built-in skills now declare `model_hint` or `model_routing` in `SKILL.md`
+- Routing metadata is now standardized across the core skill catalog
+- Update flow now has a skill-aware conflict resolver for routing metadata
+
+**Conflict handling improvement:**
+- During `/dex-update`, conflicted skill files can now be auto-resolved by:
+  - keeping your local skill instructions/custom edits
+  - merging upstream routing metadata (`model_hint`, `model_routing`)
+  - skipping `*-custom` skills completely
+
+This reduces update friction for users who customize built-in skills while still letting new model-routing behavior land safely.
+
+---
+
 ## [1.17.0] — Mobile Meeting Recordings Now Sync Automatically (2026-03-01)
 
 If you record meetings on your phone with Granola, those recordings now appear in Dex alongside your desktop meetings. No manual import, no extra steps — they just show up.
@@ -254,7 +354,7 @@ This is powered by [QMD](https://github.com/tobi/qmd), an open-source local sear
 
 > "I think QMD is one of my finest tools. I use it every day because it's the foundation of all the other tools I build for myself. A local search engine that lives and executes entirely on your computer. Both for you and agents." — [Tobi Lütke](https://x.com/tobi/status/2013217570912919575)
 
-**This is optional.** It requires downloading AI models (~2GB) that run locally on your machine. No API keys, no cloud services. Run `/enable-semantic-search` when you're ready — or skip it entirely.
+**Setup required.** Semantic search is available but requires running `/enable-semantic-search` to set it up (5 min, 2.5GB download). New users are offered this during onboarding. Once enabled, all vault searches automatically use semantic matching instead of keyword-only — skills don't change, the AI routing layer gets smarter and uses QMD when available.
 
 **What gets better when you enable it:**
 
