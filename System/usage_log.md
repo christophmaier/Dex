@@ -117,7 +117,7 @@
 Tracks anonymous feature usage tracking to help improve Dex.
 
 - **Consent asked:** true
-- **Consent decision:** opted-in
+- **Consent decision:** opted-out
 - **Consent date:** 2026-03-02
 - **Last prompted:** 2026-03-02
 

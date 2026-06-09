@@ -113,4 +113,4 @@ quarterly_planning:
 
 # Analytics Configuration
 analytics:
-  enabled: true
+  enabled: false

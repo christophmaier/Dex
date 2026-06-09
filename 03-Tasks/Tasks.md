@@ -19,7 +19,8 @@ Your task backlog organized by priority.
 
 - [ ] **Follow-up Corinna Kley (DigitalService)** — Wenn keine Antwort bis 2026-03-13: kurze Nachfrage senden #Job-Search ⏳ 2026-03-13 ^task-20260302-corinna-followup-01
 - [ ] **Neu Wohnen Recruiter nachfassen** — Kein Rückruf bisher; nachhaken #Job-Search ^task-20260302-neuwohnen-01
-- [ ] **Dirk Schuran (Rainmaker Society) kontaktieren** — Zu lange aufgeschoben; jetzt anschreiben #Berlin-Network ^task-20260302-dirk-01
+- [x] **Dirk Schuran (Rainmaker Society) kontaktieren** — Zu lange aufgeschoben; jetzt anschreiben #Berlin-Network ^task-20260302-dirk-01 ✅ 2026-04-22
+- [ ] **Follow-up Dirk Schuran** — CV gesendet 2026-04-22; wenn keine Antwort bis 2026-04-29: kurze Nachfrage senden #Berlin-Network ⏳ 2026-04-29 ^task-20260422-dirk-followup-01
 - [ ] **Follow up Julia Schieber** — Schedule 15-min discovery interview on agentic coaching; she's warm, interested, has felt the coaching-access pain #Build-and-Ship ^task-20260224-julia-01
 - [ ] **KAMPA Follow-up in ~2 Monaten** — Kontakt aufnehmen (von mir aus!): Gitzen oder Hammerstingl + Frank Schönfeld + Baugruppe GF — Status Angebot erfragen #Berlin-Network ^task-20260227-kampa-01
 - [ ] **GLS Kontakte in Dex hinterlegen** — habe Kontakte, noch nicht angelegt ^task-20260228-gls-01
@@ -28,7 +29,10 @@ Your task backlog organized by priority.
 
 ## P2 - Normal (max 10)
 
-<!-- Standard priority items -->
+- [x] **ERGO Versicherung kündigen** — Kündigung abgeschickt 2026-05-15 ✅ ^task-20260528-ergo-01
+- [ ] **ERGO Kündigung bestätigen lassen** — Portal zeigt 28.05. noch "aktiv"; Frist 3 Monate zum Quartalsende → Vertragsende 30.06., Rückzahlung ab 30.09.2026 bestätigen lassen ⏳ 2026-06-04 ^task-20260528-ergo-followup-01
+- [ ] **HelloFresh als Arbeitgeber prüfen** — Sandra Urban Tipp; Berlin, relevante Größe; Product-Leadership-Rollen recherchieren #Job-Search ^task-20260422-berlin-employers-01
+- [ ] **Sandra Urban: Baugruppe-Verbindung klären** — Sandra besitzt 3 Immobilien als Investment; Interesse an Baugruppe Schönfließ prüfen / Netzwerk nutzen #Berlin-Network ^task-20260422-sandra-baugruppe-01
 
 ## P3 - Backlog
 
